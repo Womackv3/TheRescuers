@@ -1,0 +1,61 @@
+[gd_scene load_steps=2 format=3 uid="uid://devconsole123"]
+
+[ext_resource type="Script" path="res://Scripts/UI/DevConsole.gd" id="1_dev"]
+
+[node name="DevConsole" type="CanvasLayer"]
+layer = 100
+script = ExtResource("1_dev")
+
+[node name="PanelContainer" type="PanelContainer" parent="."]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -225.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = 200.0
+grow_horizontal = 0
+
+[node name="VBoxContainer" type="VBoxContainer" parent="PanelContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+text = "DEV CONSOLE (~)"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="GodModeCheck" type="CheckBox" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+text = "God Mode (Invincible)"
+
+[node name="LevelUpButton" type="Button" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+text = "Instant Level Up"
+
+[node name="HSeparator2" type="HSeparator" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label2" type="Label" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+text = "Spawn Stuff"
+horizontal_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="PanelContainer/VBoxContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="BtnSnake" type="Button" parent="PanelContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = "Snake"
+
+[node name="BtnKnight" type="Button" parent="PanelContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = "Knight"
+
+[connection signal="toggled" from="PanelContainer/VBoxContainer/GodModeCheck" to="." method="_on_god_mode_toggled"]
+[connection signal="pressed" from="PanelContainer/VBoxContainer/LevelUpButton" to="." method="_on_level_up_pressed"]
+[connection signal="pressed" from="PanelContainer/VBoxContainer/HBoxContainer/BtnSnake" to="." method="_on_spawn_enemy_pressed" binds= [0]]
+[connection signal="pressed" from="PanelContainer/VBoxContainer/HBoxContainer/BtnKnight" to="." method="_on_spawn_enemy_pressed" binds= [1]]

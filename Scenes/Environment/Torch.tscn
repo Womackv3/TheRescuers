@@ -1,0 +1,47 @@
+[gd_scene load_steps=6 format=3 uid="uid://c2k8yq7b2n4m"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_stick"]
+albedo_color = Color(0.4, 0.2, 0.1, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_stick"]
+material = SubResource("StandardMaterial3D_stick")
+size = Vector3(0.1, 0.5, 0.1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_flame"]
+transparency = 1
+blend_mode = 1
+shading_mode = 0
+vertex_color_use_as_albedo = true
+albedo_color = Color(1, 0.8, 0.2, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_flame"]
+material = SubResource("StandardMaterial3D_flame")
+size = Vector3(0.15, 0.15, 0.15)
+
+[sub_resource type="Gradient" id="Gradient_flame"]
+colors = PackedColorArray(1, 0.8, 0, 1, 1, 0.2, 0, 0)
+
+[node name="Torch" type="Node3D"]
+
+[node name="Stick" type="MeshInstance3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 0, 0)
+mesh = SubResource("BoxMesh_stick")
+
+[node name="OmniLight3D" type="OmniLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0.2)
+light_color = Color(1, 0.6, 0.2, 1)
+light_energy = 2.5
+shadow_enabled = false
+omni_range = 12.0
+omni_attenuation = 1.0
+
+[node name="CPUParticles3D" type="CPUParticles3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0.2)
+amount = 12
+lifetime = 0.5
+mesh = SubResource("BoxMesh_flame")
+emission_shape = 1
+emission_sphere_radius = 0.05
+direction = Vector3(0, 1, 0)
+gravity = Vector3(0, 4, 0)
+color_ramp = SubResource("Gradient_flame")

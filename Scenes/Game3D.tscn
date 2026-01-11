@@ -1,0 +1,53 @@
+[gd_scene load_steps=8 format=3 uid="uid://don6l0nbkg25w"]
+
+[ext_resource type="Script" uid="uid://ckpwyxr67145u" path="res://Scripts/Actors/PlayerController3D.gd" id="1_player"]
+[ext_resource type="Script" uid="uid://b8jbr6yquvl0n" path="res://Scripts/Actors/VoxelKnightVisuals.gd" id="2_visuals"]
+[ext_resource type="Script" uid="uid://cu6t33py2ht07" path="res://Scripts/Environment/VoxelWorld.gd" id="3_world"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/UpgradeUI.tscn" id="4_xin6i"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/PauseMenu.tscn" id="5_mcpu6"]
+[ext_resource type="AudioStream" path="res://Assets/Audio/Music/Harp.mp3" id="6_music"]
+[ext_resource type="Script" uid="uid://hhqu6cud0idt" path="res://Scripts/Core/BackgroundMusic.gd" id="7_bg_music"]
+[ext_resource type="PackedScene" uid="uid://c8j6k4n2m5q1" path="res://Scenes/UI/HUD.tscn" id="8_hud"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/DevConsole.tscn" id="9_devcon"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.4
+height = 1.0
+
+[node name="Game3D" type="Node3D"]
+
+[node name="VoxelWorld" type="Node3D" parent="."]
+script = ExtResource("3_world")
+
+[node name="Player3D" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 32, 5, 32)
+script = ExtResource("1_player")
+
+[node name="VoxelKnightVisuals" type="Node3D" parent="Player3D"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
+script = ExtResource("2_visuals")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player3D"]
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="Camera3D" type="Camera3D" parent="Player3D"]
+transform = Transform3D(1, 0, 0, 0, 0.866, 0.5, 0, -0.5, 0.866, 0, 8, 10)
+projection = 1
+size = 14.0
+far = 100.0
+
+[node name="UpgradeUI" parent="." instance=ExtResource("4_xin6i")]
+
+[node name="HUD" parent="." instance=ExtResource("8_hud")]
+
+[node name="PauseMenu" parent="." instance=ExtResource("5_mcpu6")]
+
+[node name="DevConsole" parent="." instance=ExtResource("9_devcon")]
+
+[node name="BackgroundMusic" type="AudioStreamPlayer" parent="."]
+stream = ExtResource("6_music")
+autoplay = true
+bus = &"Music"
+script = ExtResource("7_bg_music")
+
+[connection signal="ready" from="BackgroundMusic" to="BackgroundMusic" method="_on_ready"]

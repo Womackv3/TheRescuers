@@ -1,0 +1,10 @@
+# Add these input actions to your Project Settings -> Input Map
+
+# Movement actions (if not already present)
+move_forward = W key
+move_backward = S key
+move_left = A key
+move_right = D key
+
+# These should already exist in Godot by default:
+# ui_cancel = ESC key (used for pause menu)

@@ -1,0 +1,6 @@
+.godot/
+.mono/
+.vscode/
+*.sln
+*.csproj.user
+logs/
