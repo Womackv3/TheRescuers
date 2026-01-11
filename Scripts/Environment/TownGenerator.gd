@@ -40,6 +40,9 @@ static func generate_town_layout(world: Node, center_x: int, center_z: int):
 	# Smaller fence perimeter
 	build_fence(world, center_x, center_z, town_radius - 2)
 	
+	# Add decorative clutter
+	add_town_decorations(world, center_x, center_z)
+	
 	print("Town generated at (", center_x, ", ", center_z, ")")
 
 static func build_house(world: Node, start_x: int, start_z: int, variant: int):
@@ -191,15 +194,15 @@ static func build_town_hall(world: Node, start_x: int, start_z: int):
 	add_interior_zone(world, start_x, start_z, width, depth, roof_voxels, "town_hall")
 
 static func build_fountain(world: Node, center_x: int, center_z: int):
-	# Simple 3x3 fountain
-	for x in range(-1, 2):
-		for z in range(-1, 2):
-			world.spawn_voxel(center_x + x, 2, center_z + z, world.TileType.COBBLESTONE)
-			if abs(x) == 1 or abs(z) == 1:
-				world.spawn_voxel(center_x + x, 3, center_z + z, world.TileType.COBBLESTONE)
+	# Use detailed mini-voxel well model
+	var well = preload("res://Scripts/Environment/MiniVoxelModel.gd").new()
+	well.voxel_world = world
+	well.build_detailed_well()
 	
-	# Water in center
-	world.spawn_voxel(center_x, 2, center_z, world.TileType.WATER)
+	# Position at world coordinates
+	well.position = Vector3(center_x * world.block_size, 2 * world.block_size, center_z * world.block_size)
+	world.add_child(well)
+	print("Built detailed well at (", center_x, ", ", center_z, ")")
 
 static func build_fence(world: Node, center_x: int, center_z: int, radius: int):
 	# Simple fence around perimeter
@@ -234,3 +237,57 @@ static func add_interior_zone(world: Node, start_x: int, start_z: int, width: in
 	
 	# Setup the script
 	interior_zone.setup(building_name, roof_blocks)
+
+static func add_town_decorations(world: Node, center_x: int, center_z: int):
+	# Add decorative clutter to make town feel alive
+	
+	# Barrels scattered around
+	var barrel_positions = [
+		Vector2i(center_x - 10, center_z - 5),
+		Vector2i(center_x + 6, center_z - 8),
+		Vector2i(center_x - 2, center_z + 10),
+		Vector2i(center_x + 12, center_z + 5),
+		Vector2i(center_x - 8, center_z + 8),
+	]
+	
+	for pos in barrel_positions:
+		build_barrel(world, pos.x, pos.y)
+	
+	# Shop stands (detailed market stalls)
+	build_detailed_market_stall(world, center_x - 6, center_z + 2)
+	build_detailed_market_stall(world, center_x + 2, center_z - 6)
+	
+	# Flower patches
+	var flower_patches = [
+		Vector2i(center_x - 12, center_z + 10),
+		Vector2i(center_x + 10, center_z + 10),
+		Vector2i(center_x - 5, center_z - 10),
+		Vector2i(center_x + 8, center_z - 8),
+	]
+	
+	for patch_center in flower_patches:
+		# 3x3 flower patch
+		for x_off in range(-1, 2):
+			for z_off in range(-1, 2):
+				if randf() < 0.7:  # Not every spot has a flower
+					world.spawn_voxel(patch_center.x + x_off, 2, patch_center.y + z_off, world.TileType.FLOWER)
+
+static func build_barrel(world: Node, x: int, z: int):
+	# Use detailed mini-voxel model
+	var barrel = preload("res://Scripts/Environment/MiniVoxelModel.gd").new()
+	barrel.voxel_world = world
+	barrel.build_detailed_barrel()
+	
+	# Position at world coordinates (convert grid to world space)
+	barrel.position = Vector3(x * world.block_size, 2 * world.block_size, z * world.block_size)
+	world.add_child(barrel)
+
+static func build_detailed_market_stall(world: Node, x: int, z: int):
+	# Use detailed mini-voxel model
+	var stall = preload("res://Scripts/Environment/MiniVoxelModel.gd").new()
+	stall.voxel_world = world
+	stall.build_detailed_market_stall()
+	
+	# Position at world coordinates
+	stall.position = Vector3(x * world.block_size, 2 * world.block_size, z * world.block_size)
+	world.add_child(stall)

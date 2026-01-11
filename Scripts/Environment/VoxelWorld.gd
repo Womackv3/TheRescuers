@@ -307,9 +307,11 @@ func generate_terrain():
 	spawn_enemy("knight", Vector3(12, 5, 12))
 	spawn_enemy("knight", Vector3(42, 5, 32))
 	print("--- TRIED SPAWNING ENEMIES END ---")
-
-
 	
+	# Cloud shadows now built into voxel shader
+	# _create_cloud_layer()
+
+
 
 
 func _spawn_water_surface(x, y, z):
@@ -617,11 +619,51 @@ func _restore_water(pos: Vector3i):
 		# We can check material override or metadata. 
 		# For now, simplistic check: assume if we are calling this, we want to ensure water.
 		var node = voxel_map[pos]
-		node.queue_free()
+		node.queue_free() # Remove existing block
 		voxel_map.erase(pos)
 	
-	spawn_voxel(pos.x, pos.y, pos.z, TileType.WATER)
-	_spawn_water_surface(pos.x, pos.y, pos.z)
+	# Restore water block
+	var water_pos = Vector3(pos.x, 0, pos.z) * block_size
+	spawn_voxel(pos.x, 0, pos.z, TileType.WATER)
+	_spawn_water_surface(pos.x, 0, pos.z)
+
+func _create_cloud_layer():
+	# Create a large plane above the world for cloud shadows
+	var cloud_plane = MeshInstance3D.new()
+	cloud_plane.name = "CloudShadowLayer"
+	
+	# Create plane mesh
+	var plane_mesh = PlaneMesh.new()
+	var world_size = Vector2(chunk_size.x * block_size, chunk_size.z * block_size)
+	plane_mesh.size = world_size * 2  # Make it bigger than the world
+	plane_mesh.subdivide_width = 10
+	plane_mesh.subdivide_depth = 10
+	
+	cloud_plane.mesh = plane_mesh
+	
+	# Load and apply cloud shader
+	var cloud_shader = load("res://Resources/Shaders/CloudLayer.gdshader")
+	var cloud_material = ShaderMaterial.new()
+	cloud_material.shader = cloud_shader
+	
+	# Set shader parameters
+	cloud_material.set_shader_parameter("cloud_color", Color(1.0, 1.0, 1.0, 0.0))  # Transparent clouds
+	cloud_material.set_shader_parameter("shadow_color", Color(0.0, 0.0, 0.0, 1.0))  # Solid black shadows
+	cloud_material.set_shader_parameter("cloud_scale", 0.2)  # Larger clouds
+	cloud_material.set_shader_parameter("cloud_speed", 0.03)  # Slightly faster
+	cloud_material.set_shader_parameter("cloud_threshold", 0.5)  # More clouds
+	cloud_material.set_shader_parameter("shadow_strength", 0.6)  # Darker shadows
+	
+	cloud_plane.material_override = cloud_material
+	
+	# Position above the world
+	var center_x = (chunk_size.x * block_size) / 2.0
+	var center_z = (chunk_size.z * block_size) / 2.0
+	cloud_plane.position = Vector3(center_x, 20.0, center_z)  # High above world
+	
+	# No collision
+	add_child(cloud_plane)
+	print("Cloud shadow layer created at height 20")
 
 
 func spawn_debris(pos: Vector3, color: Color):
@@ -773,7 +815,7 @@ func _init_materials():
 				mat.set_shader_parameter("pattern_type", 2) # Cracked look
 				mat.set_shader_parameter("roughness", 0.7)
 			elif type == TileType.GRASS:
-				mat.set_shader_parameter("pattern_type", 0) # Subtle (keep as-is)
+				mat.set_shader_parameter("pattern_type", 0) # Subtle
 				mat.set_shader_parameter("roughness", 0.9)
 			elif type == TileType.DIRT:
 				mat.set_shader_parameter("pattern_type", 0) # Subtle

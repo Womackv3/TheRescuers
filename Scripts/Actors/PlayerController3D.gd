@@ -211,6 +211,9 @@ func _physics_process(delta):
 	# Handle Jump: Check Physical Key directly to avoid Action Map conflicts
 	if Input.is_action_just_pressed("jump") and is_on_floor():
 		velocity.y = jump_velocity
+		
+		# Check if there's a block above when jumping
+		call_deferred("_check_head_bump")
 	
 	# Handle Ground Pound: Activate in mid-air
 	if Input.is_action_just_pressed("ground_pound") and not is_on_floor() and not is_ground_pounding:
@@ -463,20 +466,48 @@ func _perform_ground_pound_impact():
 	
 	# Get VoxelWorld
 	var world = get_tree().get_first_node_in_group("VoxelWorld")
-	if not world:
-		return
+	if world:
+		# Get player position in grid coordinates
+		var player_grid_pos = global_position / world.block_size
+		var center_x = int(player_grid_pos.x)
+		var center_z = int(player_grid_pos.z)
+		
+		# Damage 3x3 area - only the TOP surface blocks
+		for x_offset in range(-1, 2):
+			for z_offset in range(-1, 2):
+				var block_x = center_x + x_offset
+				var block_z = center_z + z_offset
+				
+				# Check if within world bounds
+				if block_x >= 0 and block_x < world.chunk_size.x and block_z >= 0 and block_z < world.chunk_size.z:
+					# Get the surface height and type from column data
+					var surface_height = world.columns[block_x][block_z]["height"]
+					var surface_type = world.columns[block_x][block_z]["type"]
+					
+					# Don't damage water blocks
+					if surface_type != world.TileType.WATER:
+						var block_pos = Vector3i(block_x, surface_height, block_z)
+						world.damage_block(block_pos, damage)
 	
-	# Get player position in grid coordinates
-	var player_grid_pos = global_position / world.block_size
-	var center_x = int(player_grid_pos.x)
-	var center_z = int(player_grid_pos.z)
-	var y = int(player_grid_pos.y) - 1 # Block directly below
+	# Damage enemies in area
+	var space_state = get_world_3d().direct_space_state
+	var query = PhysicsShapeQueryParameters3D.new()
+	var sphere = SphereShape3D.new()
+	sphere.radius = 2.0  # 2 block radius
+	query.shape = sphere
+	query.transform = Transform3D(Basis(), global_position)
+	query.collision_mask = 1 | 2
 	
-	# Damage 3x3 area below player
-	for x_offset in range(-1, 2):
-		for z_offset in range(-1, 2):
-			var block_pos = Vector3i(center_x + x_offset, y, center_z + z_offset)
-			world.damage_block(block_pos, damage)
+	var results = space_state.intersect_shape(query)
+	for result in results:
+		var collider = result.collider
+		if collider and collider != self and collider.has_method("take_damage"):
+			# Damage enemy with moderate upward knockback
+			collider.take_damage(damage, global_position)
+			if collider.has_method("apply_knockback"):
+				var knockback_dir = (collider.global_position - global_position).normalized()
+				knockback_dir.y = 0.5  # Moderate upward component
+				collider.apply_knockback(knockback_dir * 5.0)  # Reduced from potential high values
 	
 	# Visual/Audio feedback
 	var combat_player = get_node_or_null("CombatPlayer")
@@ -494,3 +525,30 @@ func _perform_ground_pound_impact():
 		tween.tween_property(camera, "position", original_pos, 0.05)
 	
 	print("Ground Pound! Damage: ", damage)
+
+func _check_head_bump():
+	# Check for blocks directly above player's head
+	var world = get_tree().get_first_node_in_group("VoxelWorld")
+	if not world:
+		return
+	
+	# Get player head position (top of character)
+	var head_pos = global_position + Vector3(0, 1.5, 0)  # Player height
+	var grid_pos = head_pos / world.block_size
+	
+	var check_x = int(grid_pos.x)
+	var check_y = int(grid_pos.y)
+	var check_z = int(grid_pos.z)
+	
+	# Check block directly above
+	var block_pos = Vector3i(check_x, check_y, check_z)
+	
+	# Get player stats for damage
+	var stats = CharacterDB.get_character("ray")
+	if stats:
+		var damage = int(stats.base_attack * PlayerStats.damage_mult)
+		
+		# Damage the block above
+		if world.voxel_map.has(block_pos):
+			world.damage_block(block_pos, damage)
+			print("Head bump! Breaking block above")
