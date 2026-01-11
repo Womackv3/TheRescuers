@@ -40,6 +40,11 @@ func _on_xp_changed(_amount):
 	_update_xp()
 
 func _on_level_up(level):
+	# Don't show level up notification if upgrade screen is visible
+	var upgrade_ui = get_tree().get_first_node_in_group("UpgradeUI")
+	if upgrade_ui and upgrade_ui.visible:
+		return  # Skip notification during upgrade selection
+	
 	_update_xp()
 	show_toast("Level Up! " + str(level))
 

@@ -15,9 +15,9 @@ func _ready():
 func take_damage(amount: int, source_pos: Vector3 = Vector3.ZERO):
 	health -= amount
 	
-	# Show damage number
-	if GameManager.has_method("spawn_damage_number"):
-		GameManager.spawn_damage_number(global_position, amount, Color(1, 1, 0)) # Yellow for props
+	# Show damage number - DISABLED for trees to reduce visual clutter
+	# if GameManager.has_method("spawn_damage_number"):
+	# 	GameManager.spawn_damage_number(global_position, amount, Color(1, 1, 0)) # Yellow for props
 	
 	# Visual feedback - Always spawn small debris on hit
 	var world = get_tree().get_first_node_in_group("VoxelWorld")

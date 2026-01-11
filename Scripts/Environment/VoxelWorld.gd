@@ -1,9 +1,17 @@
 extends Node3D
 
-@export var chunk_size : Vector3i = Vector3i(64, 5, 64)
+@export var chunk_size : Vector3i = Vector3i(64, 5, 64) # Flat world height
 @export var block_size : float = 1.0
 
-# Tile types
+# ... (TileType enum unchanged)
+
+# Terrain data
+var columns = []
+var voxel_map = {} # Vector3i -> MeshInstance3D
+
+# Noise Generators
+var height_noise: FastNoiseLite
+var cave_noise: FastNoiseLite
 enum TileType {
 	GRASS,
 	DESERT,
@@ -44,7 +52,7 @@ var tile_colors = {
 	TileType.WOOD_PLANKS: Color(0.6, 0.4, 0.2),  # Wood Planks
 	TileType.COBBLESTONE: Color(0.4, 0.4, 0.45), # Cobblestone
 	TileType.THATCH: Color(0.8, 0.7, 0.4),       # Thatch
-	TileType.BRICK: Color(0.7, 0.3, 0.2)         # Red Brick
+	TileType.BRICK: Color(0.5, 0.5, 0.52)        # Grey Stone Brick
 }
 
 # Materials (cached for performance)
@@ -53,9 +61,6 @@ var materials = {}
 # Container for all voxel nodes
 var voxel_container : Node3D
 
-# Terrain data
-var columns = []
-var voxel_map = {} # Vector3i -> MeshInstance3D
 
 # Lighting Data
 var light_map = {} # Vector3i -> int (0-15)
@@ -136,7 +141,26 @@ func _ready():
 	world_env.environment = environment
 	add_child(world_env)
 	
+	world_env.environment = environment
+	add_child(world_env)
+	
+	_init_noise()
 	generate_terrain()
+
+func _init_noise():
+	# 1. Height Map Noise (Mountains)
+	height_noise = FastNoiseLite.new()
+	height_noise.seed = randi()
+	height_noise.frequency = 0.01 # Lower frequency for larger mountains
+	height_noise.fractal_type = FastNoiseLite.FRACTAL_FBM
+	height_noise.fractal_octaves = 5
+	
+	# 2. Cave Noise (3D Worms/Swiss Cheese)
+	cave_noise = FastNoiseLite.new()
+	cave_noise.seed = randi()
+	cave_noise.frequency = 0.05
+	cave_noise.fractal_type = FastNoiseLite.FRACTAL_RIDGED # Good for tunnels
+	cave_noise.fractal_octaves = 2
 
 
 
@@ -147,75 +171,98 @@ func generate_terrain():
 	for child in voxel_container.get_children():
 		child.queue_free()
 	voxel_map.clear()
-	
-	# 1. Height Map Generation
-	var noise = FastNoiseLite.new()
-	noise.seed = randi()
-	noise.frequency = 0.08
-	
-	# Store column data [x][z] = {height, type}
 	columns.clear()
+	
+	# 2-Pass Generation for Culling
+	# Pass 1: Data Calculation
+	var grid_data = {} # Vector3i -> int (TileType)
+	
 	for x in range(chunk_size.x):
 		columns.append([])
 		for z in range(chunk_size.z):
-			var noise_val = noise.get_noise_2d(x, z)
+			# Simple 2D noise for basic terrain
+			var noise_val = height_noise.get_noise_2d(x, z)
 			var type = TileType.GRASS
 			var height = 1
 			
-			if noise_val < -0.3:
+			# Town area - force flat
+			var town_center_x = 32
+			var town_center_z = 32
+			var town_radius = 20
+			var dist_to_town = sqrt(pow(x - town_center_x, 2) + pow(z - town_center_z, 2))
+			
+			if dist_to_town < town_radius:
+				# Town area - flat grass
+				type = TileType.GRASS
+				height = 1
+			elif noise_val < -0.3:
+				# Water areas
 				type = TileType.WATER
 				height = 0
 			elif noise_val < 0.0:
+				# Grass (slightly elevated)
 				type = TileType.GRASS
 				height = 1
 			elif noise_val < 0.4:
+				# Desert
 				type = TileType.DESERT
+				height = 2
+			else:
+				# Higher grass
+				type = TileType.GRASS
 				height = 2
 			
 			columns[x].append({"height": height, "type": type})
 			
-	# 2. Spawn Voxels
-	print("Spawning Voxels... chunk_size: ", chunk_size)
-	var voxel_count = 0
-	for x in range(chunk_size.x):
-		for z in range(chunk_size.z):
-			var col_data = columns[x][z]
-			var surface_type = col_data["type"]
-			var height = col_data["height"]
-			
-			# Fill column
+			# Fill column from bottom to surface
 			for y in range(height + 1):
-				var type = surface_type
+				var block_type = type
 				
 				# Subsurface logic
 				if y < height:
-					if surface_type == TileType.GRASS:
-						type = TileType.DIRT
-					elif surface_type == TileType.DESERT:
-						type = TileType.DIRT if y == height - 1 else TileType.STONE
-					elif surface_type == TileType.WATER:
-						type = TileType.STONE
+					if type == TileType.GRASS or type == TileType.DESERT:
+						block_type = TileType.DIRT
+					elif type == TileType.WATER:
+						block_type = TileType.STONE
 				
-				# Spawn voxel
-				var voxel = spawn_voxel(x, y, z, type)
-				voxel_count += 1
+				grid_data[Vector3i(x, y, z)] = block_type
+
+	# Pass 2: Spawning (with Culling)
+	for pos_key in grid_data:
+		var x = pos_key.x
+		var y = pos_key.y
+		var z = pos_key.z
+		var type = grid_data[pos_key]
+		
+		# Check Neighbors (Up, Down, Left, Right, Forward, Back)
+		var is_visible = false
+		var directions = [Vector3i.UP, Vector3i.DOWN, Vector3i.LEFT, Vector3i.RIGHT, Vector3i.FORWARD, Vector3i.BACK]
+		
+		for d in directions:
+			var neighbor = pos_key + d
+			if not grid_data.has(neighbor):
+				is_visible = true
+				break
+		
+		if is_visible:
+			var voxel = spawn_voxel(x, y, z, type)
+			
+			# Decoration (Top only)
+			if not grid_data.has(pos_key + Vector3i.UP):
+				decorate_voxel(voxel, type, x, z)
 				
-				if y == height:
-					decorate_voxel(voxel, type, x, z)
-					
-					# Special: Water Surface Layer
-					if type == TileType.WATER:
-						_spawn_water_surface(x, y, z)
+				# Water surface effect
+				if type == TileType.WATER:
+					_spawn_water_surface(x, y, z)
 	
-	print("Terrain Generation Complete. Spawning Items... Voxel Count: ", voxel_count)
-	
-	add_platform(10, 10, 15, 15, 3, TileType.WALL)
-	add_platform(40, 30, 10, 12, 2, TileType.WALL)
-	
-	# Generate Town
+	# Generate Town FIRST (before platforms/decorations)
 	if has_method("generate_town"):
 		generate_town(32, 32)
-		
+	
+	# Build castles
+	build_castle(10, 10, 15, 15, 3)
+	build_castle(40, 30, 10, 12, 2)
+	
 	# Generate Forest Border
 	print("Generating Forest Border...")
 	var border_depth = 3
@@ -260,7 +307,6 @@ func generate_terrain():
 	spawn_enemy("knight", Vector3(12, 5, 12))
 	spawn_enemy("knight", Vector3(42, 5, 32))
 	print("--- TRIED SPAWNING ENEMIES END ---")
-	generate_town(32, 32)
 
 
 	
@@ -279,37 +325,93 @@ func _spawn_water_surface(x, y, z):
 	# No collision
 	voxel_container.add_child(mesh)
 
-func add_platform(start_x, start_z, width, depth, height, type):
+func build_castle(start_x, start_z, width, depth, wall_height):
+	# Clear the entire area
 	for x in range(start_x, start_x + width):
 		for z in range(start_z, start_z + depth):
-			# Remove any existing voxels/decorations at this column
-			# This prevents Cacti/Flowers from appearing inside/on walls
 			clear_column(x, z)
-
-			# Update column data
-			if x >= 0 and x < chunk_size.x and z >= 0 and z < chunk_size.z:
-				columns[x][z]["height"] = height
-				columns[x][z]["type"] = type
+	
+	# Add grass floor to entire interior
+	for x in range(start_x, start_x + width):
+		for z in range(start_z, start_z + depth):
+			spawn_voxel(x, 0, z, TileType.DIRT)
+			spawn_voxel(x, 1, z, TileType.GRASS)
+	
+	# Build perimeter walls (hollow interior)
+	for x in range(start_x, start_x + width):
+		for z in range(start_z, start_z + depth):
+			# Only build on perimeter
+			var is_perimeter = (x == start_x or x == start_x + width - 1 or 
+								z == start_z or z == start_z + depth - 1)
 			
-			var top_voxel = spawn_voxel(x, height, z, type)
-			decorate_wall_face(top_voxel, x, z, x*z + height)
+			if is_perimeter:
+				# Build wall from ground to wall_height
+				for y in range(wall_height + 1):
+					spawn_voxel(x, y, z, TileType.BRICK)
+				
+				# Add battlements (crenellations) on top
+				# Alternating pattern: solid, air, solid, air
+				if (x + z) % 2 == 0:
+					spawn_voxel(x, wall_height + 1, z, TileType.BRICK)
+	
+	# Build 4 corner watchtowers (3x3, taller than walls)
+	var tower_height = wall_height + 3
+	var corners = [
+		Vector2i(start_x, start_z),                          # Bottom-left
+		Vector2i(start_x + width - 3, start_z),              # Bottom-right
+		Vector2i(start_x, start_z + depth - 3),              # Top-left
+		Vector2i(start_x + width - 3, start_z + depth - 3)   # Top-right
+	]
+	
+	for corner in corners:
+		for tx in range(3):
+			for tz in range(3):
+				var x = corner.x + tx
+				var z = corner.y + tz
+				
+				# Build tower from ground to tower_height
+				for y in range(tower_height + 1):
+					spawn_voxel(x, y, z, TileType.BRICK)
+				
+				# Tower battlements (only on outer edges)
+				var is_outer = (tx == 0 or tx == 2 or tz == 0 or tz == 2)
+				if is_outer and (tx + tz) % 2 == 0:
+					spawn_voxel(x, tower_height + 1, z, TileType.BRICK)
+	
+	# Build central well (3x3 with water in center)
+	var well_x = start_x + width / 2 - 1
+	var well_z = start_z + depth / 2 - 1
+	
+	for wx in range(3):
+		for wz in range(3):
+			var x = well_x + wx
+			var z = well_z + wz
 			
-			# Fill below
-			for y in range(height):
-				var voxel = spawn_voxel(x, y, z, type)
-				decorate_wall_face(voxel, x, z, x*z + y)
+			# Outer ring is cobblestone
+			if wx == 0 or wx == 2 or wz == 0 or wz == 2:
+				spawn_voxel(x, 1, z, TileType.COBBLESTONE)
+				spawn_voxel(x, 2, z, TileType.COBBLESTONE)
+			else:
+				# Center is water
+				spawn_voxel(x, 1, z, TileType.WATER)
+				_spawn_water_surface(x, 1, z)
+	
+	# Spawn knights in castle courtyard
+	var num_knights = randi_range(2, 4)
+	for i in range(num_knights):
+		var spawn_x = start_x + randi_range(3, width - 4)
+		var spawn_z = start_z + randi_range(3, depth - 4)
+		var spawn_pos = Vector3(spawn_x * block_size, 3.0, spawn_z * block_size)
+		spawn_enemy("knight", spawn_pos)
 func generate_town(center_x: int, center_z: int):
 	print("Generating town at (", center_x, ", ", center_z, ")")
 	var TownGen = load("res://Scripts/Environment/TownGenerator.gd")
 	TownGen.generate_town_layout(self, center_x, center_z)
 
 func clear_column(target_x: int, target_z: int):
-	# Optimized lookup: Find all Y positions for this X/Z
-	# Since we don't track Y range per column easily, we scan a logical range
-	# Or, since columns[] tracks height, we know the max height!
-	# But platform could be higher.
-	# Just checking 0..15 covers everything in this prototype.
-	for y in range(16):
+	# Clear all Y positions for this X/Z column
+	# Use chunk_size.y to handle the new increased height
+	for y in range(chunk_size.y):
 		var key = Vector3i(target_x, y, target_z)
 		if voxel_map.has(key):
 			voxel_map[key].queue_free()
@@ -465,8 +567,9 @@ func _destroy_block_internal(grid_pos: Vector3i) -> bool:
 		# If we are destroying a deep block, it's likely dirt/stone.
 		var surface_type = columns[pos.x][pos.z]["type"]
 		
-		if surface_type == TileType.WALL:
-			enemy_type = "knight"
+		# Don't spawn enemies from castle walls or structural blocks
+		if surface_type == TileType.WALL or surface_type == TileType.BRICK:
+			pass # No enemy spawning from castle blocks
 		elif surface_type == TileType.GRASS:
 			if randf() < 0.5: enemy_type = "snake"
 			else: enemy_type = "squirrel"
@@ -497,7 +600,7 @@ func spawn_loot(pos: Vector3):
 			type = Pickup.PickupType.SPEED
 			
 		var pickup = PowerupFactory.create_powerup(type)
-		pickup.position = pos + Vector3(0, 0.5, 0)
+		pickup.position = pos + Vector3(0, 0.2, 0)  # Reduced from 0.5 to prevent floating overhead
 		
 		# Add to scene, not voxel container, to persist
 		add_child(pickup)

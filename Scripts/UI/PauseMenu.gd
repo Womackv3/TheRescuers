@@ -174,7 +174,7 @@ func _setup_audio_tab():
 	
 	music_slider.min_value = 0
 	music_slider.max_value = 100
-	music_slider.value = 80
+	music_slider.value = 100  # Set slider to 100%
 	music_slider.value_changed.connect(_on_music_volume_changed)
 	
 	sfx_slider.min_value = 0
@@ -182,8 +182,9 @@ func _setup_audio_tab():
 	sfx_slider.value = 100
 	sfx_slider.value_changed.connect(_on_sfx_volume_changed)
 	
-	# Apply initial volume
+	# Apply initial volume - Music bus is 30% softer (-10dB)
 	_on_master_volume_changed(30)
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), -10.0)  # ~30% volume reduction
 
 func _on_master_volume_changed(value: float):
 	var db = linear_to_db(value / 100.0)
